@@ -157,6 +157,8 @@ class _OverseerEyeState extends State<OverseerEye> with TickerProviderStateMixin
                 else
                   ClipPath(clipper: _ShapeClipper(a.shape), child: body),
                 CustomPaint(painter: _EdgePainter(a)),
+                if (a.accessory != OverseerAccessory.none)
+                  CustomPaint(painter: _AccessoryPainter(a, t)),
                 CustomPaint(
                   painter: _EyePainter(
                     appearance: a,
@@ -421,6 +423,131 @@ class _EdgePainter extends CustomPainter {
   bool shouldRepaint(_EdgePainter old) => old.appearance != appearance;
 }
 
+/// Worn over the body. Drawn after the edge so it reads as *on* the overseer
+/// rather than suspended inside it.
+class _AccessoryPainter extends CustomPainter {
+  _AccessoryPainter(this.appearance, this.phase);
+  final Appearance appearance;
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final c = Offset(w / 2, h / 2);
+    final edge = appearance.paint.edge;
+
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.045
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = edge;
+    final fill = Paint()..color = edge;
+
+    switch (appearance.accessory) {
+      case OverseerAccessory.none:
+        return;
+
+      case OverseerAccessory.halo:
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(c.dx, h * 0.10), width: w * 0.52, height: h * 0.13),
+          line,
+        );
+
+      case OverseerAccessory.crown:
+        final base = h * 0.16;
+        final p = Path()..moveTo(w * 0.30, base);
+        for (var i = 0; i < 3; i++) {
+          final x0 = w * (0.30 + i * 0.133);
+          p.lineTo(x0 + w * 0.066, base - h * 0.10);
+          p.lineTo(x0 + w * 0.133, base);
+        }
+        canvas.drawPath(p, line);
+
+      case OverseerAccessory.antenna:
+        canvas.drawLine(
+            Offset(c.dx, h * 0.14), Offset(c.dx, h * 0.02), line);
+        // Bobs gently, so it reads as attached to something alive.
+        final bob = math.sin(phase * 2) * h * 0.012;
+        canvas.drawCircle(Offset(c.dx, h * 0.02 + bob), w * 0.055, fill);
+
+      case OverseerAccessory.visor:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+                center: Offset(c.dx, h * 0.55), width: w * 0.78, height: h * 0.13),
+            Radius.circular(h * 0.065),
+          ),
+          Paint()..color = edge.withValues(alpha: 0.45),
+        );
+
+      case OverseerAccessory.wings:
+        for (final dir in [-1.0, 1.0]) {
+          final p = Path()
+            ..moveTo(c.dx + dir * w * 0.34, h * 0.48)
+            ..quadraticBezierTo(c.dx + dir * w * 0.62, h * 0.30,
+                c.dx + dir * w * 0.56, h * 0.62)
+            ..quadraticBezierTo(c.dx + dir * w * 0.50, h * 0.58,
+                c.dx + dir * w * 0.34, h * 0.62);
+          canvas.drawPath(p, line);
+        }
+
+      case OverseerAccessory.shackle:
+        canvas.drawArc(
+          Rect.fromCenter(
+              center: Offset(c.dx, h * 0.86), width: w * 0.44, height: h * 0.22),
+          0,
+          math.pi,
+          false,
+          line,
+        );
+
+      case OverseerAccessory.laurel:
+        for (final dir in [-1.0, 1.0]) {
+          for (var i = 0; i < 4; i++) {
+            final t = 0.30 + i * 0.14;
+            canvas.drawOval(
+              Rect.fromCenter(
+                center: Offset(c.dx + dir * w * 0.40, h * t),
+                width: w * 0.16,
+                height: h * 0.075,
+              ),
+              line..strokeWidth = w * 0.028,
+            );
+          }
+        }
+
+      case OverseerAccessory.spike:
+        canvas.drawPath(
+          Path()
+            ..moveTo(c.dx - w * 0.07, h * 0.16)
+            ..lineTo(c.dx, h * 0.0)
+            ..lineTo(c.dx + w * 0.07, h * 0.16)
+            ..close(),
+          fill,
+        );
+
+      case OverseerAccessory.orbit:
+        // A ring seen edge-on, rotating.
+        canvas.save();
+        canvas.translate(c.dx, c.dy);
+        canvas.rotate(phase * 0.6);
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset.zero, width: w * 1.02, height: h * 0.30),
+          line..strokeWidth = w * 0.03,
+        );
+        canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_AccessoryPainter old) =>
+      old.appearance != appearance || old.phase != phase;
+}
+
 class _EyePainter extends CustomPainter {
   _EyePainter({
     required this.appearance,
@@ -483,17 +610,90 @@ class _EyePainter extends CustomPainter {
     final travel = irisR - pupilR - 1;
     final look = eye + Offset(gaze.dx * travel, gaze.dy * travel);
 
+    final ink = Paint()..color = paint.pupil;
+
+    // `slit` is the alert *mood* overriding the chosen eye — scrutiny reads the
+    // same whatever the overseer normally looks like.
     if (slit) {
-      // A vertical slit reads as scrutiny in a way a small circle does not.
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(center: look, width: pupilR * 0.8, height: pupilR * 2.4),
+          Rect.fromCenter(
+              center: look, width: pupilR * 0.8, height: pupilR * 2.4),
           Radius.circular(pupilR * 0.4),
         ),
-        Paint()..color = paint.pupil,
+        ink,
       );
     } else {
-      canvas.drawCircle(look, pupilR, Paint()..color = paint.pupil);
+      switch (appearance.eye) {
+        case OverseerEyeKind.round:
+          canvas.drawCircle(look, pupilR, ink);
+
+        case OverseerEyeKind.slit:
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(
+                  center: look, width: pupilR * 0.7, height: pupilR * 2.2),
+              Radius.circular(pupilR * 0.35),
+            ),
+            ink,
+          );
+
+        case OverseerEyeKind.compound:
+          // A cluster of small cells, insect-like.
+          for (var i = 0; i < 7; i++) {
+            final ang = i * 2 * math.pi / 6;
+            final off = i == 6
+                ? Offset.zero
+                : Offset(math.cos(ang), math.sin(ang)) * pupilR * 0.62;
+            canvas.drawCircle(look + off, pupilR * 0.34, ink);
+          }
+
+        case OverseerEyeKind.cross:
+          final bar = Paint()
+            ..color = paint.pupil
+            ..strokeWidth = pupilR * 0.55
+            ..strokeCap = StrokeCap.round;
+          canvas.drawLine(look - Offset(pupilR, 0), look + Offset(pupilR, 0), bar);
+          canvas.drawLine(look - Offset(0, pupilR), look + Offset(0, pupilR), bar);
+
+        case OverseerEyeKind.ring:
+          canvas.drawCircle(
+            look,
+            pupilR * 0.85,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = pupilR * 0.5
+              ..color = paint.pupil,
+          );
+
+        case OverseerEyeKind.triad:
+          for (var i = 0; i < 3; i++) {
+            final ang = -math.pi / 2 + i * 2 * math.pi / 3;
+            canvas.drawCircle(
+                look + Offset(math.cos(ang), math.sin(ang)) * pupilR * 0.55,
+                pupilR * 0.4,
+                ink);
+          }
+
+        case OverseerEyeKind.void_:
+          // No pupil at all — the iris is a hole. Deeply unsettling, which is
+          // the point of it being a late unlock.
+          canvas.drawCircle(eye, irisR * 0.82,
+              Paint()..color = paint.pupil);
+
+        case OverseerEyeKind.scanner:
+          // A horizontal bar that tracks left and right rather than a pupil.
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(
+                  center: Offset(look.dx, eye.dy),
+                  width: irisR * 1.5,
+                  height: pupilR * 0.75),
+              Radius.circular(pupilR * 0.35),
+            ),
+            ink,
+          );
+      }
     }
 
     // A catchlight, offset from the gaze, so the eye reads as wet.

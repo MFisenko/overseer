@@ -68,6 +68,28 @@ class SectionHead extends StatelessWidget {
   }
 }
 
+/// Caps content at a readable measure and centres it.
+///
+/// The app is phone-first but runs in a browser window that can be 2560px wide.
+/// Without this the credit balance ends up a metre from the tier bar and every
+/// line of prose runs to twenty words — legible, but nothing you would want to
+/// look at daily. Nothing here is desktop-specific; it simply stops growing.
+class Readable extends StatelessWidget {
+  const Readable({super.key, required this.child, this.maxWidth = 620});
+
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: child,
+        ),
+      );
+}
+
 /// Something on the left, something on the right, and no way for either to
 /// overflow.
 ///
@@ -238,7 +260,8 @@ class GlassPanel extends StatelessWidget {
             color: tint ?? tk.glass,
             borderRadius: radius,
             border: border
-                ? Border.all(color: tk.glassEdge.withValues(alpha: 0.5), width: 1)
+                ? Border.all(
+                    color: tk.glassEdge.withValues(alpha: 0.5), width: 1)
                 : null,
           ),
           child: child,
@@ -389,7 +412,8 @@ class SoftButton extends StatelessWidget {
 
 /// A small status pill: money tier, cadence, kind.
 class Tag extends StatelessWidget {
-  const Tag(this.text, {super.key, this.color, this.filled = false, this.leading});
+  const Tag(this.text,
+      {super.key, this.color, this.filled = false, this.leading});
   final String text;
   final Color? color;
   final bool filled;
@@ -400,7 +424,8 @@ class Tag extends StatelessWidget {
     final tk = context.tk;
     final c = color ?? tk.inkDim;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: leading == null ? 9 : 7, vertical: 5),
+      padding: EdgeInsets.symmetric(
+          horizontal: leading == null ? 9 : 7, vertical: 5),
       decoration: BoxDecoration(
         color: filled ? c.withValues(alpha: 0.12) : Colors.transparent,
         border: Border.all(color: c.withValues(alpha: filled ? 0.0 : 0.35)),
@@ -417,8 +442,7 @@ class Tag extends StatelessWidget {
               text.toUpperCase(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style:
-                  Kind.label(context, size: 9, color: c, w: FontWeight.w700),
+              style: Kind.label(context, size: 9, color: c, w: FontWeight.w700),
             ),
           ),
         ],
@@ -437,7 +461,8 @@ class VoidState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: Gap.lg, horizontal: Gap.lg),
+        padding:
+            const EdgeInsets.symmetric(vertical: Gap.lg, horizontal: Gap.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

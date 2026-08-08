@@ -16,6 +16,13 @@ class Profile {
   /// Equipped cosmetic ids by slot name — see [CosmeticType.slot].
   final Map<String, String> equipped;
 
+  /// Appearance unlocks this account owns, by [Unlockable] id.
+  ///
+  /// Free options are not stored — they are implied by the catalogue, so a new
+  /// free item added later is immediately available to everyone rather than
+  /// only to accounts created afterwards.
+  final Set<String> ownedUnlocks;
+
   /// 'system', 'light' or 'dark'. Both modes are first-class; neither is a
   /// tinted afterthought of the other.
   final String themeMode;
@@ -30,6 +37,7 @@ class Profile {
     this.questsCollected = 0,
     this.rewardsClaimed = 0,
     this.equipped = const {},
+    this.ownedUnlocks = const {},
     this.themeMode = 'system',
     required this.createdAt,
   });
@@ -76,6 +84,7 @@ class Profile {
     int? questsCollected,
     int? rewardsClaimed,
     Map<String, String>? equipped,
+    Set<String>? ownedUnlocks,
     String? themeMode,
   }) =>
       Profile(
@@ -86,6 +95,7 @@ class Profile {
         questsCollected: questsCollected ?? this.questsCollected,
         rewardsClaimed: rewardsClaimed ?? this.rewardsClaimed,
         equipped: equipped ?? this.equipped,
+        ownedUnlocks: ownedUnlocks ?? this.ownedUnlocks,
         themeMode: themeMode ?? this.themeMode,
         createdAt: createdAt,
       );
@@ -108,6 +118,7 @@ class Profile {
         'quests_collected': questsCollected,
         'rewards_claimed': rewardsClaimed,
         'equipped': equipped,
+        'owned_unlocks': ownedUnlocks.toList(),
         'theme_mode': themeMode,
         'created_at': createdAt.toIso8601String(),
       };
@@ -122,6 +133,8 @@ class Profile {
         questsCollected: (json['quests_collected'] as num?)?.toInt() ?? 0,
         rewardsClaimed: (json['rewards_claimed'] as num?)?.toInt() ?? 0,
         equipped: Map<String, String>.from(json['equipped'] as Map? ?? const {}),
+        ownedUnlocks:
+            ((json['owned_unlocks'] as List?) ?? const []).cast<String>().toSet(),
         themeMode: json['theme_mode'] as String? ?? 'system',
         createdAt: json['created_at'] == null
             ? DateTime.now()

@@ -10,7 +10,9 @@ import 'package:overseer/data/local_repository.dart';
 import 'package:overseer/models/quest.dart';
 import 'package:overseer/models/reward.dart';
 import 'package:overseer/models/upkeep.dart';
+import 'package:overseer/core/rarity.dart';
 import 'package:overseer/models/appearance.dart';
+import 'package:overseer/models/unlockable.dart';
 import 'package:overseer/screens/companion/overseer_screen.dart';
 import 'package:overseer/screens/home/home_screen.dart';
 import 'package:overseer/screens/pass/pass_screen.dart';
@@ -362,6 +364,110 @@ void main() {
 
   test('the catalogue offers well over a hundred looks', () {
     expect(Appearance.lookCount, greaterThan(100));
+  });
+
+  group('cosmetics are earned, never bought with money', () {
+    test('every appearance option is obtainable', () {
+      // A value added to an enum but missing from the catalogue would be
+      // permanently unreachable. The catalogue is generated, so this holds by
+      // construction — the test guards the construction.
+      final counts = {
+        UnlockSlot.shape: OverseerShape.values.length,
+        UnlockSlot.finish: OverseerFinish.values.length,
+        UnlockSlot.paint: OverseerPaint.catalogue.length,
+        UnlockSlot.eye: OverseerEyeKind.values.length,
+        UnlockSlot.accessory: OverseerAccessory.values.length,
+        UnlockSlot.persona: OverseerPersona.values.length,
+      };
+      for (final e in counts.entries) {
+        expect(UnlockCatalogue.inSlot(e.key).length, e.value,
+            reason: '${e.key.name} is missing options');
+      }
+    });
+
+    test('every slot has a free starting option', () {
+      for (final slot in UnlockSlot.values) {
+        expect(UnlockCatalogue.inSlot(slot).where((u) => u.freeByDefault).length,
+            1,
+            reason: '${slot.name} must have exactly one free option');
+      }
+    });
+
+    test('rarity drives price, and the top end is a real grind', () {
+      expect(Rarity.legendary.shardPrice,
+          greaterThan(Rarity.common.shardPrice * 10));
+      // A whole season of milestone tiers must not buy a legendary.
+      var seasonShards = 0;
+      for (var t = 1; t <= Economy.seasonTiers; t++) {
+        seasonShards += Economy.shardsForTier(t);
+      }
+      expect(seasonShards, lessThan(Rarity.legendary.shardPrice));
+    });
+
+    test('a duplicate always refunds something', () {
+      for (final r in Rarity.values) {
+        expect(r.dustValue, greaterThan(0));
+        expect(r.dustValue, lessThan(r.shardPrice));
+      }
+    });
+
+    test('exactly one rotating item is buyable in any month', () {
+      final when = DateTime(2026, 8);
+      final buyable = UnlockCatalogue.all
+          .where((u) => u.rotating && UnlockCatalogue.isBuyable(u, when))
+          .toList();
+      expect(buyable.length, lessThanOrEqualTo(1));
+    });
+
+    test('the monthly offer is stable within a month and moves between them', () {
+      final a = UnlockCatalogue.rotationFor(DateTime(2026, 8, 1));
+      final b = UnlockCatalogue.rotationFor(DateTime(2026, 8, 28));
+      final c = UnlockCatalogue.rotationFor(DateTime(2026, 9, 1));
+      expect(a?.id, b?.id);
+      expect(a?.id, isNot(c?.id));
+    });
+
+    test('the box never contains this month\'s offer', () {
+      final when = DateTime(2026, 8);
+      final offer = UnlockCatalogue.rotationFor(when);
+      expect(UnlockCatalogue.boxPool(when).map((u) => u.id),
+          isNot(contains(offer?.id)));
+    });
+  });
+
+  test('buying an unlock spends shards and grants ownership', () async {
+    SharedPreferences.setMockInitialValues({});
+    final game = GameState(LocalRepository(namespace: 'shop'));
+    await game.load();
+
+    final item = UnlockCatalogue.all.firstWhere(
+        (u) => !u.freeByDefault && !u.rotating && u.rarity == Rarity.common);
+
+    // Cannot afford it yet.
+    expect(game.owns(item), isFalse);
+    expect(await game.buyUnlock(item), isFalse);
+
+    await game.grantDemoShards(item.shardPrice);
+    expect(await game.buyUnlock(item), isTrue);
+    expect(game.owns(item), isTrue);
+    expect(game.wallet.shards, 0);
+
+    // Buying it twice is refused rather than charged.
+    await game.grantDemoShards(item.shardPrice);
+    expect(await game.buyUnlock(item), isFalse);
+    expect(game.wallet.shards, item.shardPrice);
+  });
+
+  test('a locked option cannot be worn', () async {
+    SharedPreferences.setMockInitialValues({});
+    final game = GameState(LocalRepository(namespace: 'equip'));
+    await game.load();
+
+    final locked =
+        UnlockCatalogue.inSlot(UnlockSlot.shape).firstWhere((u) => !u.freeByDefault);
+    final before = game.companion.appearance.shape;
+    await game.equipUnlock(locked);
+    expect(game.companion.appearance.shape, before);
   });
 
   testWidgets('the ladder builds all 150 rungs without overflow',

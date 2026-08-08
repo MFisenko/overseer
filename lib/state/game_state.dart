@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart' show ChangeNotifier, ThemeMode;
@@ -6,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/economy.dart';
 import '../core/horizon.dart';
+import '../core/rarity.dart';
 import '../data/repository.dart';
 import '../data/snapshot.dart';
 import '../models/calibration.dart';
@@ -18,6 +20,7 @@ import '../models/quest.dart';
 import '../models/reward.dart';
 import '../models/season.dart';
 import '../models/taste.dart';
+import '../models/unlockable.dart';
 import '../models/upkeep.dart';
 import '../models/wallet.dart';
 import 'game_event.dart';
@@ -1168,6 +1171,134 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --------------------------------------------------------- appearance
+  /// Whether this account owns an appearance option.
+  ///
+  /// Free items are owned implicitly rather than written to the profile, so
+  /// adding a new free option later gives it to everyone at once instead of
+  /// only to accounts created afterwards.
+  bool owns(Unlockable u) =>
+      u.freeByDefault || _snap.profile.ownedUnlocks.contains(u.id);
+
+  bool ownsId(String id) {
+    final u = UnlockCatalogue.byId(id);
+    return u != null && owns(u);
+  }
+
+  /// This month's single rotating offer.
+  Unlockable? get monthlyOffer => UnlockCatalogue.rotationFor(DateTime.now());
+
+  /// Whether something can be bought right now — owned things cannot, and a
+  /// rotating item is only on sale during its month.
+  bool canBuy(Unlockable u) =>
+      !owns(u) && UnlockCatalogue.isBuyable(u, DateTime.now());
+
+  /// Buys an appearance unlock with shards.
+  Future<bool> buyUnlock(Unlockable u) async {
+    if (owns(u)) return false;
+    if (!UnlockCatalogue.isBuyable(u, DateTime.now())) {
+      _emit(const GameNotice('NOT AVAILABLE THIS MONTH'));
+      return false;
+    }
+    if (!await spendShards(u.shardPrice, u.name)) return false;
+    await _grant(u);
+    _emit(UnlockAcquired(u, fromBox: false));
+    return true;
+  }
+
+  Future<void> _grant(Unlockable u) async {
+    final owned = {..._snap.profile.ownedUnlocks, u.id};
+    final p = _snap.profile.copyWith(ownedUnlocks: owned);
+    _snap = _snap.copyWith(profile: p);
+    await _repo.saveProfile(p);
+    notifyListeners();
+  }
+
+  /// Opens a lootbox: spends shards, rolls the rarity table, and either grants
+  /// something new or refunds dust for a duplicate.
+  ///
+  /// A box is deliberately worse value than saving for the thing you want. The
+  /// gamble is a choice, never the efficient path — and a duplicate always pays
+  /// something back, because a repeat pull worth nothing makes the whole
+  /// mechanic feel like a swindle.
+  Future<BoxResult?> openLootbox({Random? rng}) async {
+    if (!await spendShards(lootboxShardPrice, 'LOOTBOX')) return null;
+
+    final r = rng ?? Random();
+    final pool = UnlockCatalogue.boxPool(DateTime.now());
+    if (pool.isEmpty) return null;
+
+    // Weight by rarity, then pick uniformly within the chosen rarity so a
+    // legendary roll cannot be diluted by there happening to be many of them.
+    final rarity = _rollRarity(r);
+    var candidates = pool.where((u) => u.rarity == rarity).toList();
+    if (candidates.isEmpty) candidates = pool;
+    final won = candidates[r.nextInt(candidates.length)];
+
+    if (owns(won)) {
+      final dust = won.rarity.dustValue;
+      await _awardShards(dust);
+      final result = BoxResult(won, duplicate: true, dust: dust);
+      _emit(BoxOpened(result));
+      return result;
+    }
+
+    await _grant(won);
+    final result = BoxResult(won, duplicate: false, dust: 0);
+    _emit(BoxOpened(result));
+    _emit(UnlockAcquired(won, fromBox: true));
+    return result;
+  }
+
+  static Rarity _rollRarity(Random r) {
+    final total =
+        Rarity.values.fold(0.0, (sum, x) => sum + x.weight);
+    var roll = r.nextDouble() * total;
+    for (final x in Rarity.values) {
+      roll -= x.weight;
+      if (roll <= 0) return x;
+    }
+    return Rarity.common;
+  }
+
+  int get ownedCount => UnlockCatalogue.all.where(owns).length;
+
+  /// The current appearance with one option swapped in — used to preview an
+  /// option as the overseer would actually wear it.
+  Appearance appearanceWith(Unlockable u) {
+    final a = _snap.companion.appearance;
+    final key = u.id.split('.').last;
+    return switch (u.slot) {
+      UnlockSlot.shape => a.copyWith(shape: OverseerShape.values.byName(key)),
+      UnlockSlot.finish => a.copyWith(finish: OverseerFinish.values.byName(key)),
+      UnlockSlot.paint => a.copyWith(paintId: 'paint.$key'),
+      UnlockSlot.eye => a.copyWith(eye: OverseerEyeKind.values.byName(key)),
+      UnlockSlot.accessory =>
+        a.copyWith(accessory: OverseerAccessory.values.byName(key)),
+      UnlockSlot.persona =>
+        a.copyWith(persona: OverseerPersona.values.byName(key)),
+    };
+  }
+
+  bool isEquipped(Unlockable u) {
+    final a = _snap.companion.appearance;
+    final key = u.id.split('.').last;
+    return switch (u.slot) {
+      UnlockSlot.shape => a.shape.name == key,
+      UnlockSlot.finish => a.finish.name == key,
+      UnlockSlot.paint => a.paintId == 'paint.$key',
+      UnlockSlot.eye => a.eye.name == key,
+      UnlockSlot.accessory => a.accessory.name == key,
+      UnlockSlot.persona => a.persona.name == key,
+    };
+  }
+
+  /// Wears an option. Refuses anything not owned — the store is the only way in.
+  Future<void> equipUnlock(Unlockable u) async {
+    if (!owns(u)) return;
+    await setAppearance(appearanceWith(u));
+  }
+
   /// Changes how the overseer looks or sounds. Shape, finish, paint and
   /// persona are independent, so any combination in the catalogue is reachable.
   Future<void> setAppearance(Appearance a) async {
@@ -1278,4 +1409,7 @@ class GameState extends ChangeNotifier {
   /// state is reachable by ordinary play rather than fabricated.
   @visibleForTesting
   Future<void> grantDemoXp(int xp) => _grantXp(xp, 'SEED');
+
+  @visibleForTesting
+  Future<void> grantDemoShards(int shards) => _awardShards(shards);
 }

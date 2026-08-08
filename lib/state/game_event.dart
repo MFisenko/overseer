@@ -1,4 +1,5 @@
 import '../core/economy.dart';
+import '../models/unlockable.dart';
 import '../models/cosmetic.dart';
 
 /// Things worth putting on screen the instant they happen.
@@ -106,4 +107,24 @@ class StreakMilestone extends GameEvent {
   final int days;
   final int shards;
   const StreakMilestone(this.days, this.shards);
+}
+
+/// An appearance option was acquired, bought or pulled.
+class UnlockAcquired extends GameEvent {
+  final Unlockable unlockable;
+  final bool fromBox;
+  const UnlockAcquired(this.unlockable, {required this.fromBox});
+}
+
+/// What a lootbox produced. A duplicate is never nothing — it pays dust.
+class BoxResult {
+  final Unlockable unlockable;
+  final bool duplicate;
+  final int dust;
+  const BoxResult(this.unlockable, {required this.duplicate, required this.dust});
+}
+
+class BoxOpened extends GameEvent {
+  final BoxResult result;
+  const BoxOpened(this.result);
 }

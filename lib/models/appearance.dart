@@ -381,18 +381,79 @@ extension OverseerPersonaInfo on OverseerPersona {
       };
 }
 
+/// The eye itself. The single most expressive part — it is what makes the
+/// thing read as watching rather than decorating.
+enum OverseerEyeKind {
+  round,
+  slit,
+  compound,
+  cross,
+  ring,
+  triad,
+  void_,
+  scanner,
+}
+
+extension OverseerEyeInfo on OverseerEyeKind {
+  String get label => switch (this) {
+        OverseerEyeKind.round => 'ROUND',
+        OverseerEyeKind.slit => 'SLIT',
+        OverseerEyeKind.compound => 'COMPOUND',
+        OverseerEyeKind.cross => 'CROSS',
+        OverseerEyeKind.ring => 'RING',
+        OverseerEyeKind.triad => 'TRIAD',
+        OverseerEyeKind.void_ => 'VOID',
+        OverseerEyeKind.scanner => 'SCANNER',
+      };
+}
+
+/// Worn over the body. Optional — [none] is a first-class choice, not an empty
+/// slot, because the bare silhouette is the best-looking option and should
+/// never feel like a placeholder.
+enum OverseerAccessory {
+  none,
+  halo,
+  crown,
+  antenna,
+  visor,
+  wings,
+  shackle,
+  laurel,
+  spike,
+  orbit,
+}
+
+extension OverseerAccessoryInfo on OverseerAccessory {
+  String get label => switch (this) {
+        OverseerAccessory.none => 'BARE',
+        OverseerAccessory.halo => 'HALO',
+        OverseerAccessory.crown => 'CROWN',
+        OverseerAccessory.antenna => 'ANTENNA',
+        OverseerAccessory.visor => 'VISOR',
+        OverseerAccessory.wings => 'WINGS',
+        OverseerAccessory.shackle => 'SHACKLE',
+        OverseerAccessory.laurel => 'LAUREL',
+        OverseerAccessory.spike => 'SPIKE',
+        OverseerAccessory.orbit => 'ORBIT',
+      };
+}
+
 /// What the overseer currently looks and sounds like.
 class Appearance {
   final OverseerShape shape;
   final OverseerFinish finish;
   final String paintId;
   final OverseerPersona persona;
+  final OverseerEyeKind eye;
+  final OverseerAccessory accessory;
 
   const Appearance({
     this.shape = OverseerShape.triangle,
     this.finish = OverseerFinish.glass,
     this.paintId = 'paint.origin',
     this.persona = OverseerPersona.overseer,
+    this.eye = OverseerEyeKind.round,
+    this.accessory = OverseerAccessory.none,
   });
 
   OverseerPaint get paint => OverseerPaint.byId(paintId);
@@ -401,19 +462,25 @@ class Appearance {
   static int get lookCount =>
       OverseerShape.values.length *
       OverseerFinish.values.length *
-      OverseerPaint.catalogue.length;
+      OverseerPaint.catalogue.length *
+      OverseerEyeKind.values.length *
+      OverseerAccessory.values.length;
 
   Appearance copyWith({
     OverseerShape? shape,
     OverseerFinish? finish,
     String? paintId,
     OverseerPersona? persona,
+    OverseerEyeKind? eye,
+    OverseerAccessory? accessory,
   }) =>
       Appearance(
         shape: shape ?? this.shape,
         finish: finish ?? this.finish,
         paintId: paintId ?? this.paintId,
         persona: persona ?? this.persona,
+        eye: eye ?? this.eye,
+        accessory: accessory ?? this.accessory,
       );
 
   Map<String, dynamic> toJson() => {
@@ -421,6 +488,8 @@ class Appearance {
         'finish': finish.name,
         'paint_id': paintId,
         'persona': persona.name,
+        'eye': eye.name,
+        'accessory': accessory.name,
       };
 
   factory Appearance.fromJson(Map<String, dynamic> json) => Appearance(
@@ -429,5 +498,8 @@ class Appearance {
         paintId: json['paint_id'] as String? ?? 'paint.origin',
         persona:
             OverseerPersona.values.byName(json['persona'] as String? ?? 'overseer'),
+        eye: OverseerEyeKind.values.byName(json['eye'] as String? ?? 'round'),
+        accessory: OverseerAccessory.values
+            .byName(json['accessory'] as String? ?? 'none'),
       );
 }

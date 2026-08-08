@@ -173,9 +173,13 @@ class _RootShellState extends State<RootShell> {
     return FeedbackOverlay(
       child: CompanionLayer(
         child: Scaffold(
-          body: IndexedStack(
-            index: _index,
-            children: [for (final d in _destinations) d.build()],
+          // One place to cap the measure for every destination, rather than
+          // remembering to do it in each screen.
+          body: Readable(
+            child: IndexedStack(
+              index: _index,
+              children: [for (final d in _destinations) d.build()],
+            ),
           ),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
@@ -186,17 +190,19 @@ class _RootShellState extends State<RootShell> {
               top: false,
               child: SizedBox(
                 height: 58,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < _destinations.length; i++)
-                      Expanded(
-                        child: _NavItem(
-                          dest: _destinations[i],
-                          selected: i == _index,
-                          onTap: () => setState(() => _index = i),
+                child: Readable(
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < _destinations.length; i++)
+                        Expanded(
+                          child: _NavItem(
+                            dest: _destinations[i],
+                            selected: i == _index,
+                            onTap: () => setState(() => _index = i),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -208,7 +214,8 @@ class _RootShellState extends State<RootShell> {
 }
 
 class _NavItem extends StatelessWidget {
-  const _NavItem({required this.dest, required this.selected, required this.onTap});
+  const _NavItem(
+      {required this.dest, required this.selected, required this.onTap});
   final _Dest dest;
   final bool selected;
   final VoidCallback onTap;
