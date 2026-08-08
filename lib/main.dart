@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'app.dart';
@@ -28,6 +29,20 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform);
+
+    // App Check proves a request came from this app rather than from anyone
+    // who read the API key out of the published bundle. Firebase AI Logic
+    // rejects unattested calls outright, so without this every Gemini path
+    // returns 401 — and without it the key would be free quota for strangers.
+    //
+    // The reCAPTCHA Enterprise key is domain-locked to the deployed origin and
+    // localhost; it is a public site key, not a secret.
+    await FirebaseAppCheck.instance.activate(
+      webProvider:
+          ReCaptchaEnterpriseProvider('6LfNtXstAAAAANAzEkdZc0PCsl606z4fYFgx1eLg'),
+      androidProvider: AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck,
+    );
   } catch (e) {
     debugPrint('Firebase unavailable, AI paths will stay dormant: $e');
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -63,7 +65,11 @@ class _AddWishSheetState extends State<AddWishSheet> {
     _text.dispose();
     _price.dispose();
     _imageUrl.dispose();
-    _speech.stop();
+    // Stopping a recognizer that was never initialised throws on web — the
+    // plugin dereferences a null handle. Only stop what was actually started.
+    if (_listening) {
+      unawaited(_speech.stop());
+    }
     super.dispose();
   }
 
