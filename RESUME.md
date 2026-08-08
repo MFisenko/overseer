@@ -1,6 +1,6 @@
 # OVERSEER — where we stopped
 
-Paused 2026-08-07. `flutter analyze` clean (0 errors), `flutter test` **138/138 green**.
+Paused 2026-08-07. `flutter analyze` clean (0 errors), `flutter test` **147/147 green**.
 
 The redesign has now been **run and looked at** in both themes, at three
 viewport widths, with real content. Screenshots below describe what works.
@@ -129,6 +129,36 @@ the app is fully playable with no connection and reconciles on the next push.
 identically and a dead link degrades to the generated plate. The add-wish sheet
 takes a pasted link that overrides whatever search found.
 
+## Two currencies, on purpose
+
+**Credits** are real money (1 EUR = 100) and buy real rewards, gated by the
+reserve. **Shards** buy everything inside the app and are deliberately off the
+money peg — they are the one thing earning more cannot reach.
+
+Shards come from collecting directives (1), milestone tiers (6/15/40) and
+streak milestones (5 → 1,500). A whole season of tier milestones pays less than
+one legendary, which is pinned by test.
+
+## Cosmetics
+
+`models/unlockable.dart` **generates** the catalogue from the appearance enums,
+so a value added to `OverseerShape` automatically gets a rarity, a price and a
+place in the store. Nothing can be added and be silently unobtainable — there is
+a test for exactly that.
+
+Six axes: shape · material · paint · eye · accessory · personality. First option
+of each is free, so a new account never faces a fully locked wardrobe.
+
+- **Locked options are shown, not hidden** — greyed at 45% with their price. A
+  locked thing you can see is a goal.
+- **Monthly rotation** — exactly one rotating item is buyable per month,
+  derived from year×12+month so it is stable within a month and cannot be
+  re-rolled by reloading.
+- **Lootboxes** cost 250 shards, roll a weighted rarity table
+  (58/27/11/3.4/0.6), and never contain that month's offer. A duplicate always
+  refunds dust — a repeat pull worth nothing makes the mechanic feel like a
+  swindle.
+
 ## Economy rules that must not drift
 
 Pinned in `test/economy_test.dart`:
@@ -203,6 +233,11 @@ dishes stops logging the dishes, then stops opening the app.
   and consistent; real generation is a seam, not a feature
 
 ## Unverified
+
+- **Desktop rendering by eye.** `Readable` caps content at 620pt and the DOM
+  confirms `flutter-view` fills the viewport correctly, but this session's
+  browser pane captures Flutter canvases at a stale scale, so no screenshot
+  proves it. The smoke suite covers 1024pt for every screen.
 
 - **Tapping the floating overseer to open its page.** The handler is wired
   (tap, plus a zero-movement-drag fallback), and the page itself is render-
