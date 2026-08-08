@@ -1,0 +1,24 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Local secrets. firebase_options.dart is deliberately NOT here: the Firebase
+# web API key is a public identifier, not a credential — access is controlled by
+# the Firestore security rules, not by hiding it.
+.env
+*.keystore
+*.jks
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json

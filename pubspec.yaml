@@ -1,0 +1,42 @@
+name: overseer
+description: "Real life as a battle pass, watched over by a floating AI overseer."
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State
+  provider: ^6.1.2
+
+  # Backend: Firebase Auth for accounts, Firestore for per-user data,
+  # Firebase AI Logic for everything intelligent.
+  firebase_core: ^4.10.0
+  firebase_auth: ^6.2.0
+  cloud_firestore: ^6.5.0
+  firebase_ai: ^3.12.0
+
+  # UI + input
+  google_fonts: ^6.2.1
+  speech_to_text: ^6.6.1
+  url_launcher: ^6.3.0
+  # Wishes can arrive as pictures — a Pinterest screenshot, a shop window.
+  image_picker: ^1.1.2
+
+  # Utility
+  uuid: ^4.4.0
+  intl: ^0.20.2
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  # Terminal type is fetched at runtime via google_fonts (JetBrains Mono).

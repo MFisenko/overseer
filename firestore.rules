@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// One document per account, readable and writable only by that account.
+//
+// The whole of a user's world lives at users/{uid}, so the rule is a single
+// ownership check rather than a per-collection matrix. Nothing here is shared,
+// aggregated or queryable across users by design — there is no social surface,
+// so there is no reason for one account to ever see another's row.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Anything not explicitly matched above is denied. Stated rather than
+    // implied, so adding a collection later is a deliberate act.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
