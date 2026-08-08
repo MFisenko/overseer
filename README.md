@@ -1,5 +1,7 @@
 # OVERSEER
 
+**Live: https://mfisenko.github.io/overseer/**
+
 Real life as a battle pass, watched over by a floating AI overseer.
 
 Doing things grants XP. XP pushes a 150-tier seasonal ladder. Crossing a tier
@@ -46,6 +48,19 @@ Tests, including a layout sweep across three viewports in both themes:
 ```bash
 flutter test
 ```
+
+## Deploying
+
+```bash
+./tool/deploy_web.sh
+```
+
+Runs the tests, builds the web release with the right base href, and force-pushes
+to the `gh-pages` branch. The source stays on `main`.
+
+Note: the Firebase web API key in `lib/firebase_options.dart` is a public
+identifier, not a secret. Access is controlled by the Firestore security rules
+in `firestore.rules`, which allow an account to touch only its own document.
 
 ## Stack
 
