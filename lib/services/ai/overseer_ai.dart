@@ -147,6 +147,63 @@ class OverseerAI {
     );
   }
 
+  /// Finds several candidate products for what the user described.
+  ///
+  /// One auto-picked answer is wrong often enough to be annoying — "a good
+  /// field recorder" has half a dozen right answers at different prices. So the
+  /// grounded pass is asked for options, each with a real image, and the user
+  /// chooses by *looking* rather than by editing fields. That is one visual
+  /// decision instead of three text ones.
+  Future<List<WishDraft>> findWishOptions(String input, {int count = 4}) async {
+    final text = input.trim();
+    if (text.isEmpty) return const [];
+
+    final research = await _grounded(
+      'The user wants to add this to their wishlist: "$text".\n\n'
+      'Search the live web and find $count DIFFERENT real, currently-buyable '
+      'products or experiences that match. Spread them across price points — '
+      'a budget option, a mid one, and something aspirational.\n\n'
+      'For each one report, on its own line:\n'
+      '- the exact product name including brand and model\n'
+      '- one sentence describing what it is, plainly, no marketing language\n'
+      '- the current price in EUR\n'
+      '- a DIRECT image URL ending in .jpg, .jpeg, .png or .webp if one appears '
+      'in the results — never a page URL, and never invented\n'
+      '- the retailer page URL\n'
+      'If you genuinely cannot find several, report however many are real.',
+    );
+    if (research == null) return const [];
+
+    final m = _model(schema: _wishListSchema, temperature: 0.3);
+    if (m == null) return const [];
+    try {
+      final res = await m.generateContent([
+        Content.text(
+          'Convert this research into wishlist entries. Keep them distinct — '
+          'do not repeat the same product at different prices. Leave image_url '
+          'empty rather than guessing at one.\n\n$research',
+        )
+      ]);
+      final json = _decode(res.text);
+      if (json == null) return const [];
+      final items = ((json['items'] as List?) ?? const [])
+          .map((e) => WishDraft.fromJson(Map<String, dynamic>.from(e as Map)))
+          .where((d) => d.name.isNotEmpty && d.priceEuro > 0)
+          .toList();
+
+      // Distinct names only; the model sometimes returns the same thing twice
+      // with a different retailer.
+      final seen = <String>{};
+      return items
+          .where((d) => seen.add(d.name.toLowerCase().trim()))
+          .take(count)
+          .toList();
+    } catch (e) {
+      debugPrint('findWishOptions failed: $e');
+      return const [];
+    }
+  }
+
   /// Reads one or more items out of an image.
   ///
   /// This is the Pinterest path: a user screenshots a board, or shares a photo

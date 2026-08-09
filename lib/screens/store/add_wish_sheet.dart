@@ -7,13 +7,16 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/economy.dart';
+import '../../core/emblem.dart';
 import '../../models/reward.dart';
 import '../../services/ai/overseer_ai.dart';
 import '../../services/ai/wish_draft.dart';
 import '../../state/game_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
+import '../../widgets/credit_mark.dart';
 import '../../widgets/primitives.dart';
+import '../../widgets/reward_image.dart';
 import '../../widgets/sheet.dart';
 
 Future<void> showAddWishSheet(BuildContext context) =>
@@ -50,6 +53,10 @@ class _AddWishSheetState extends State<AddWishSheet> {
   /// Set only when pricing failed and a figure is genuinely needed.
   bool _needsPrice = false;
   String? _error;
+
+  /// Candidates to choose between. Picking a picture is one visual decision;
+  /// editing a name, a price and a category is three text ones.
+  List<WishDraft> _options = const [];
 
   /// What was just filed, so the sheet can confirm before closing itself.
   final _filed = <String>[];
@@ -135,9 +142,27 @@ class _AddWishSheetState extends State<AddWishSheet> {
       _working = true;
       _error = null;
     });
-    final draft = await _ai.priceWish(text);
+
+    // Ask for options first. A single auto-picked answer is wrong often enough
+    // to be irritating — "a good field recorder" has several right answers.
+    final options = await _ai.findWishOptions(text);
     if (!mounted) return;
 
+    if (options.length > 1) {
+      setState(() {
+        _working = false;
+        _options = options;
+      });
+      return;
+    }
+    if (options.length == 1) {
+      await _file(options);
+      return;
+    }
+
+    // Nothing found as options; fall back to a single priced draft.
+    final draft = await _ai.priceWish(text);
+    if (!mounted) return;
     if (draft == null) {
       // Could not price it. Ask for the one thing that cannot be guessed
       // rather than throwing the thought away.
@@ -235,6 +260,13 @@ class _AddWishSheetState extends State<AddWishSheet> {
     final tk = context.tk;
 
     if (_filed.isNotEmpty) return _Filed(names: _filed);
+    if (_options.isNotEmpty) {
+      return _OptionPicker(
+        options: _options,
+        onPick: (d) => _file([d]),
+        onBack: () => setState(() => _options = const []),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,8 +340,7 @@ class _AddWishSheetState extends State<AddWishSheet> {
               child: CircularProgressIndicator(strokeWidth: 1.6, color: tk.accent),
             ),
             const SizedBox(width: Gap.md),
-            Text('Finding out what that costs',
-                style: Kind.body(context, size: 13)),
+            Text('Looking for it', style: Kind.body(context, size: 13)),
           ])
         else
           Row(
@@ -377,6 +408,111 @@ class _Filed extends StatelessWidget {
                 style: Kind.body(context, size: 13.5, color: tk.inkDim)),
         ],
       ),
+    );
+  }
+}
+
+
+/// Candidates, shown as pictures with a price. Tap the one you meant.
+///
+/// This is the only place the flow asks for a decision, and it is deliberately
+/// a visual one — recognising the right object is instant, whereas reading four
+/// product names and comparing them is work.
+class _OptionPicker extends StatelessWidget {
+  const _OptionPicker({
+    required this.options,
+    required this.onPick,
+    required this.onBack,
+  });
+
+  final List<WishDraft> options;
+  final ValueChanged<WishDraft> onPick;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Which one?', style: Kind.display(context, size: 26)),
+        const SizedBox(height: Gap.sm),
+        Text('Tap it and it goes on the manifest.',
+            style: Kind.body(context, size: 13)),
+        const SizedBox(height: Gap.lg),
+        for (final d in options)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.sm),
+            child: GestureDetector(
+              onTap: () => onPick(d),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: tk.surface,
+                  borderRadius: Radii.brLg,
+                  border: Border.all(color: tk.hairline),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 96,
+                      height: 96,
+                      child: RewardImage(
+                        imageUrl: d.imageUrl,
+                        emblem: Emblem.mark,
+                        seed: d.name,
+                        radius: BorderRadius.zero,
+                        wash: false,
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(Gap.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(d.name,
+                                style: Kind.serif(context, size: 15),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis),
+                            if (d.description.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(d.description,
+                                  style: Kind.body(context, size: 11.5),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis),
+                            ],
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                CreditAmount(d.coinCost,
+                                    size: 12, weight: FontWeight.w700),
+                                const SizedBox(width: Gap.sm),
+                                Text(euro(d.priceEuro),
+                                    style: Kind.body(context,
+                                        size: 11, color: tk.inkDim)),
+                                if (d.priceIsEstimate) ...[
+                                  const SizedBox(width: Gap.sm),
+                                  Tag('EST', color: tk.inkDim),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: Gap.sm),
+        SoftButton(
+            label: 'NONE OF THESE', dense: true, expand: true, onTap: onBack),
+      ],
     );
   }
 }

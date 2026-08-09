@@ -45,6 +45,16 @@ class _OverseerScreenState extends State<OverseerScreen> {
   final _dropped = <int>{};
   bool _working = false;
 
+  /// Filing runs a grounded price lookup per wish, so a dump with three wishes
+  /// takes real seconds. Showing which one is in flight is the difference
+  /// between "working" and "frozen".
+  bool _filing = false;
+  String? _filingWhat;
+
+  /// What the last dump produced, kept so the screen confirms rather than
+  /// silently emptying itself.
+  String? _receipt;
+
   @override
   void dispose() {
     _input.dispose();
@@ -61,6 +71,7 @@ class _OverseerScreenState extends State<OverseerScreen> {
     setState(() {
       _pending = local;
       _dropped.clear();
+      _receipt = null;
       _working = _ai.isAvailable;
     });
 
@@ -78,9 +89,15 @@ class _OverseerScreenState extends State<OverseerScreen> {
       for (var i = 0; i < _pending!.length; i++)
         if (!_dropped.contains(i)) _pending![i],
     ];
+    if (items.isEmpty) return;
     final game = context.read<GameState>();
 
+    setState(() => _filing = true);
+    final counts = <DumpKind, int>{};
+
     for (final item in items) {
+      if (mounted) setState(() => _filingWhat = item.text);
+      counts[item.kind] = (counts[item.kind] ?? 0) + 1;
       switch (item.kind) {
         case DumpKind.task:
           await game.addQuest(
@@ -117,12 +134,36 @@ class _OverseerScreenState extends State<OverseerScreen> {
       }
     }
 
+    // Emptying your head is itself worth acknowledging — small, and not
+    // multiplied by the streak, so it can never beat doing the work.
+    await game.rewardBraindump(items.length);
+
     if (!mounted) return;
     setState(() {
       _pending = null;
       _dropped.clear();
       _input.clear();
+      _filing = false;
+      _filingWhat = null;
+      _receipt = _describe(counts);
     });
+  }
+
+  /// "2 directives, 1 habit, 1 cost" — names what happened rather than saying
+  /// "done", so a misfiled line is noticed immediately.
+  static String _describe(Map<DumpKind, int> counts) {
+    String plural(int n, String one, String many) => '$n ${n == 1 ? one : many}';
+    final parts = <String>[];
+    for (final e in counts.entries) {
+      parts.add(switch (e.key) {
+        DumpKind.task => plural(e.value, 'directive', 'directives'),
+        DumpKind.habit => plural(e.value, 'habit', 'habits'),
+        DumpKind.wish => plural(e.value, 'wish', 'wishes'),
+        DumpKind.obligation => plural(e.value, 'cost', 'costs'),
+        DumpKind.done => '${e.value} already done',
+      });
+    }
+    return parts.join(' · ');
   }
 
   /// Wishes go through pricing where possible; an unpriced one still lands on
@@ -265,6 +306,44 @@ class _OverseerScreenState extends State<OverseerScreen> {
             ],
           ),
 
+          if (_receipt != null) ...[
+            const SizedBox(height: Gap.md),
+            Panel(
+              color: tk.coolSoft,
+              elevated: false,
+              borderColor: tk.cool.withValues(alpha: 0.4),
+              child: Row(children: [
+                Icon(Icons.check_rounded, size: 18, color: tk.cool),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text('Filed — $_receipt',
+                      style: Kind.body(context, size: 13, color: tk.ink)),
+                ),
+              ]),
+            ),
+          ],
+
+          if (_filing) ...[
+            const SizedBox(height: Gap.md),
+            Row(children: [
+              SizedBox(
+                width: 12,
+                height: 12,
+                child:
+                    CircularProgressIndicator(strokeWidth: 1.5, color: tk.accent),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: Text(
+                  _filingWhat == null ? 'Filing' : 'Filing — $_filingWhat',
+                  style: Kind.body(context, size: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ]),
+          ],
+
           if (_working) ...[
             const SizedBox(height: Gap.md),
             Row(children: [
@@ -294,10 +373,12 @@ class _OverseerScreenState extends State<OverseerScreen> {
               ),
             const SizedBox(height: Gap.md),
             SoftButton(
-              label: 'FILE THEM',
+              label: _filing ? 'FILING' : 'FILE THEM',
               primary: true,
               expand: true,
-              onTap: _dropped.length == _pending!.length ? null : _commit,
+              onTap: (_filing || _dropped.length == _pending!.length)
+                  ? null
+                  : _commit,
             ),
           ],
         ],
